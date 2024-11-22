@@ -28,6 +28,8 @@ public class EscopoCaixaMercadoPago extends Entidade {
 
     private String idAPI;
 
+    private String usuario;
+
     @Override
     protected void customSubClasses() {
         setCategory(5611203L);
