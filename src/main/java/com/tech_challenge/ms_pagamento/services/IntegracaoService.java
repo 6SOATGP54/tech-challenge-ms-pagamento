@@ -208,7 +208,7 @@ public class IntegracaoService {
             System.out.println(externalReference);
 
             Message message = new Message(("Pagamento efetuado " + externalReference).getBytes());
-            rabbitTemplate.send("pagamento.concluido", message);
+            rabbitTemplate.convertAndSend("pagamento.ex","", message);
         }
     }
 

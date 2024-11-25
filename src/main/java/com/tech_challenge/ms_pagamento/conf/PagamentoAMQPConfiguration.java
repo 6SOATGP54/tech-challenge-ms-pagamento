@@ -1,7 +1,6 @@
 package com.tech_challenge.ms_pagamento.conf;
 
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.core.*;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -13,16 +12,6 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class PagamentoAMQPConfiguration {
-
-    @Bean
-    public Queue criaFilaPagamento(){
-        return QueueBuilder.durable("pagamento.concluido").build();
-    }
-
-    @Bean
-    public Queue criaFilaQR(){
-        return QueueBuilder.durable("pagamento.qrcode").build();
-    }
 
     @Bean
     public RabbitAdmin criaRabbitAdmin(ConnectionFactory conn) {
@@ -49,4 +38,34 @@ public class PagamentoAMQPConfiguration {
         return rabbitTemplate;
     }
 
+    @Bean
+    public Queue filaQR(){
+        return QueueBuilder.durable("pagamento.qrcode").build();
+    }
+
+    @Bean
+    public Queue filaPagamentoConcluido(){
+        return QueueBuilder.durable("pagamento.concluido").build();
+    }
+
+    @Bean
+    public Queue filaPreparacao(){
+        return QueueBuilder.durable("preparacao.iniciar")
+                .build();
+    }
+
+    @Bean
+    public FanoutExchange fanoutExchangePagamento(){
+        return ExchangeBuilder.fanoutExchange("pagamento.ex").build();
+    }
+
+    @Bean
+    public Binding bindingPagamentoConcluido(){
+        return BindingBuilder.bind(filaPagamentoConcluido()).to(fanoutExchangePagamento());
+    }
+
+    @Bean
+    public Binding bindingPreparacao(){
+        return BindingBuilder.bind(filaPreparacao()).to(fanoutExchangePagamento());
+    }
 }
