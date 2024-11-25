@@ -169,6 +169,15 @@ public class IntegracaoService {
         return new EscopoCaixaMercadoPago();
     }
 
+    /**
+     *
+     * @param id
+     * @param type
+     *
+     * Metodo para informado para o mercado pago, enviar o status do pagamento
+     * estando efetuado, publica na fila de pagamento concluido ms-preparacao
+     * vai ler e dar andamento no pedido
+     */
     public void consultarPagamento(Object id, Object type) {
 
         if (type.equals("payment")) {
@@ -203,6 +212,13 @@ public class IntegracaoService {
         }
     }
 
+    /**
+     *
+     * @param ordemVendaMercadoPagoDTO
+     *
+     * Escuta a fila pedido efetuado para gerar o QRCODE e publica na
+     * fila par ao ms-pedido exibir para o usuário
+     */
     @RabbitListener(queues = "pedido.efetuado")
     public void gerarQR(OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO) {
         CredenciaisAcesso credenciaisAcesso = credenciaisIntegracaoRepository.findAll().get(0);
@@ -223,7 +239,6 @@ public class IntegracaoService {
                 ordemVendaMercadoPagoDTO.title(),
                 ordemVendaMercadoPagoDTO.total_amount(),
                 credenciaisAcesso.getWebHook().concat(PATH_WEBHOOK));
-
 
         Object o = RequestServices.requestToMercadoPago(emitirOrdemVenda,
                 credenciaisAcesso,
