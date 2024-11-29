@@ -26,12 +26,6 @@ public class ConfiguracaoIntegracoes {
     }
 
 
-    @GetMapping("/gerarQR")
-    public ResponseEntity<String> gerarQR(){
-        return ResponseEntity.ok(integracaoService.gerarQR());
-    }
-
-
     @PostMapping("/cadastroLojaMercadoPago")
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<EscopoLojaMercadoPago> cadastroLojaMercadoLivre(@Validated @RequestBody EscopoLojaMercadoPago escopoLojaMercadoPago) {

@@ -6,6 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tech_challenge.ms_pagamento.dtos.models.CredencialModelDTO;
 import com.tech_challenge.ms_pagamento.enums.EndpointsIntegracaoEnum;
 import com.tech_challenge.ms_pagamento.util.Assembler;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
@@ -37,6 +40,9 @@ public class IntegracaoService {
     @Autowired
     CaixaMercadoPagoRepository caixaMercadoPagoRepository;
 
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
 
     public Boolean cadastroCredenciais(CredencialModelDTO credenciaisAcesso) {
 
@@ -49,7 +55,6 @@ public class IntegracaoService {
 
         return save.getId() != null;
     }
-
 
 
     public EscopoLojaMercadoPago cadastroLojaMercadoLivre(EscopoLojaMercadoPago escopoLojaMercadoPago) {
@@ -92,10 +97,6 @@ public class IntegracaoService {
     }
 
     private CredenciaisAcesso getCredenciaisAcesso(EscopoLojaMercadoPago escopoLojaMercadoPago) {
-
-        String credenciaisId = escopoLojaMercadoPago.getCredenciaisId();
-
-        //TODO: Refatorar
         return credenciaisIntegracaoRepository.findAll().get(0);
     }
 
@@ -168,6 +169,15 @@ public class IntegracaoService {
         return new EscopoCaixaMercadoPago();
     }
 
+    /**
+     *
+     * @param id
+     * @param type
+     *
+     * Metodo para informado para o mercado pago, enviar o status do pagamento
+     * estando efetuado, publica na fila de pagamento concluido ms-preparacao
+     * vai ler e dar andamento no pedido
+     */
     public void consultarPagamento(Object id, Object type) {
 
         if (type.equals("payment")) {
@@ -197,58 +207,51 @@ public class IntegracaoService {
             System.out.println(status);
             System.out.println(externalReference);
 
-//            pedidoRepository.findByReferencia(externalReference).ifPresentOrElse(pedido -> {
-//                pedido.setStatusPedido(StatusPedido.RECEBIDO);
-//                pedido.setPagamento(status);
-//                pedidoRepository.save(pedido);
-//            }, () -> {
-//                throw new PedidoNaoEncontradoExeception("Pedido não encontrado para a referência: " + externalReference);
-//            });
-
+            Message message = new Message(("Pagamento efetuado " + externalReference).getBytes());
+            rabbitTemplate.convertAndSend("pagamento.ex","", message);
         }
     }
 
-    public String gerarQR() {
-
+    /**
+     *
+     * @param ordemVendaMercadoPagoDTO
+     *
+     * Escuta a fila pedido efetuado para gerar o QRCODE e publica na
+     * fila par ao ms-pedido exibir para o usuário
+     */
+    @RabbitListener(queues = "pedido.efetuado")
+    public void gerarQR(OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO) {
         CredenciaisAcesso credenciaisAcesso = credenciaisIntegracaoRepository.findAll().get(0);
-                EscopoCaixaMercadoPago escopoCaixaMercadoPago = caixaMercadoPagoRepository
-                .findById(credenciaisAcesso.getId())
+        EscopoCaixaMercadoPago escopoCaixaMercadoPago = caixaMercadoPagoRepository
+                .findByUsuario(credenciaisAcesso.getUsuario())
                 .orElse(new EscopoCaixaMercadoPago());
-        //TODO: Refatorar com o rabbit
-
-        String identificacaoPedido = UUID.randomUUID().toString();
-
-        List<ItemOrdemVendaDTO> itemOrdemVendaDTOList = new ArrayList<>();
-        itemOrdemVendaDTOList.add(new ItemOrdemVendaDTO("A123K9191938",
-                "marketplace",
-                "Point Mini",
-                "This is the Point Mini",
-                BigDecimal.valueOf(100),
-                1,
-                "unit",
-                BigDecimal.valueOf(100)));
-
-        OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO = new OrdemVendaMercadoPagoDTO("Pedido " + identificacaoPedido,
-                identificacaoPedido,
-                itemOrdemVendaDTOList,
-                "Pedido " + identificacaoPedido,
-                BigDecimal.valueOf(100),
-                "https://www.yourserver.com/notifications".concat(PATH_WEBHOOK));
 
         Map<Object, Object> parametros = new HashMap<>();
 
         parametros.put("user_id", credenciaisAcesso.getUsuario());
-        parametros.put("external_pos_id", "TECHCAIXA001");
+        parametros.put("external_pos_id", escopoCaixaMercadoPago.getExternal_id());
 
         String url = EndpointsIntegracaoEnum.GERARQRCODE.parametrosUrl(parametros);
 
-        Object o = RequestServices.requestToMercadoPago(ordemVendaMercadoPagoDTO,
+        OrdemVendaMercadoPagoDTO emitirOrdemVenda = new OrdemVendaMercadoPagoDTO(ordemVendaMercadoPagoDTO.description(),
+                ordemVendaMercadoPagoDTO.external_reference(),
+                ordemVendaMercadoPagoDTO.items(),
+                ordemVendaMercadoPagoDTO.title(),
+                ordemVendaMercadoPagoDTO.total_amount(),
+                credenciaisAcesso.getWebHook().concat(PATH_WEBHOOK));
+
+        Object o = RequestServices.requestToMercadoPago(emitirOrdemVenda,
                 credenciaisAcesso,
                 url,
                 HttpMethod.POST,
                 EndpointsIntegracaoEnum.GERARQRCODE);
 
-            return (String) o;
+        String qrCode = (String) o;
 
+        if(qrCode != null){
+            rabbitTemplate.convertAndSend("pagamento.qrcode", qrCode);
+        } else{
+            throw new RuntimeException("Não foi possivel gerar QRCODE do pedido" + ordemVendaMercadoPagoDTO.external_reference());
+        }
     }
 }
