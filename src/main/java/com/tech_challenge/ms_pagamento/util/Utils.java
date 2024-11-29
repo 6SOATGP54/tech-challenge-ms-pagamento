@@ -13,7 +13,7 @@ public abstract class Utils {
     CredenciaisIntegracaoRepository credenciaisIntegracaoRepository;
 
     public static  <T extends Entidade> void prePersistPreUpdate(T entity) {
-        if (entity.getUsuario() != null) {
+        if (entity.getDataCriacao() == null) {
             entity.prePersistSubClasses();
         } else {
             entity.preUpdateSubClasses();
