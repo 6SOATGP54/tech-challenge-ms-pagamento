@@ -219,7 +219,7 @@ public class IntegracaoService {
      * Escuta a fila pedido efetuado para gerar o QRCODE e publica na
      * fila par ao ms-pedido exibir para o usuário
      */
-    @RabbitListener(queues = "pedido.efetuado")
+   // @RabbitListener(queues = "pedido.efetuado") //TODO: Fazer no ms de PEDIDO
     public void gerarQR(OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO) {
         CredenciaisAcesso credenciaisAcesso = credenciaisIntegracaoRepository.findAll().get(0);
         EscopoCaixaMercadoPago escopoCaixaMercadoPago = caixaMercadoPagoRepository
