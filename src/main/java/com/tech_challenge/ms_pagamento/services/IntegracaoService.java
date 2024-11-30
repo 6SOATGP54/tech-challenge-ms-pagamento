@@ -2,25 +2,28 @@ package com.tech_challenge.ms_pagamento.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
+import com.tech_challenge.ms_pagamento.conf.PagamentoAMQPConfiguration;
+import com.tech_challenge.ms_pagamento.document.CredenciaisAcesso;
+import com.tech_challenge.ms_pagamento.document.EscopoCaixaMercadoPago;
+import com.tech_challenge.ms_pagamento.document.EscopoLojaMercadoPago;
+import com.tech_challenge.ms_pagamento.document.sustentacao.DiaDaSemana;
+import com.tech_challenge.ms_pagamento.document.sustentacao.Location;
+import com.tech_challenge.ms_pagamento.dtos.*;
 import com.tech_challenge.ms_pagamento.dtos.models.CredencialModelDTO;
 import com.tech_challenge.ms_pagamento.enums.EndpointsIntegracaoEnum;
+import com.tech_challenge.ms_pagamento.repository.CaixaMercadoPagoRepository;
+import com.tech_challenge.ms_pagamento.repository.CredenciaisIntegracaoRepository;
+import com.tech_challenge.ms_pagamento.repository.LojaMercadoLivreRepository;
 import com.tech_challenge.ms_pagamento.util.Assembler;
-import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 
-import com.tech_challenge.ms_pagamento.document.*;
-import com.tech_challenge.ms_pagamento.dtos.*;
-import com.tech_challenge.ms_pagamento.repository.*;
-import com.tech_challenge.ms_pagamento.document.sustentacao.*;
-
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -29,7 +32,7 @@ import static com.tech_challenge.ms_pagamento.util.Utils.prePersistPreUpdate;
 @Service
 public class IntegracaoService {
 
-    public static final String PATH_WEBHOOK = "/api/integracoes/mercadoPago/pagamentoRecebido";
+    public static final String PATH_WEBHOOK = "/ms-pagamento/integracoes/mercadoPago/pagamentoRecebido";
 
     @Autowired
     CredenciaisIntegracaoRepository credenciaisIntegracaoRepository;
@@ -90,6 +93,8 @@ public class IntegracaoService {
         Logger.getAnonymousLogger().info("Persistindo Loja no banco id retornado do agente externo" + escopoLojaMercadoPago.getUserId());
 
         if (escopoLojaMercadoPago.getUserId() != null) {
+
+            escopoLojaMercadoPago.setCredenciaisId(credenciaisAcesso.getUsuario());
             return lojaMercadoLivreRepository.save(escopoLojaMercadoPago);
         }
 
@@ -163,6 +168,8 @@ public class IntegracaoService {
         Logger.getAnonymousLogger().info("Persistindo CAIXA no banco id retornado do agente externo" + caixa.getIdAPI());
 
         if (caixa.getIdAPI() != null) {
+
+            caixa.setUsuario(credenciaisAcesso.getUsuario());
             return caixaMercadoPagoRepository.save(caixa);
         }
 
@@ -170,13 +177,10 @@ public class IntegracaoService {
     }
 
     /**
-     *
      * @param id
-     * @param type
-     *
-     * Metodo para informado para o mercado pago, enviar o status do pagamento
-     * estando efetuado, publica na fila de pagamento concluido ms-preparacao
-     * vai ler e dar andamento no pedido
+     * @param type Metodo para informado para o mercado pago, enviar o status do pagamento
+     *             estando efetuado, publica na fila de pagamento concluido ms-preparacao
+     *             vai ler e dar andamento no pedido
      */
     public void consultarPagamento(Object id, Object type) {
 
@@ -207,19 +211,19 @@ public class IntegracaoService {
             System.out.println(status);
             System.out.println(externalReference);
 
-            Message message = new Message(("Pagamento efetuado " + externalReference).getBytes());
-            rabbitTemplate.convertAndSend("pagamento.ex","", message);
+
+            StatusPagamentoDTO statusPagamentoDTO = new StatusPagamentoDTO();
+            statusPagamentoDTO.setStatus(status);
+            statusPagamentoDTO.setIdPedido(externalReference);
+            rabbitTemplate.convertAndSend("pagamento.ex", "", statusPagamentoDTO);
         }
     }
 
     /**
-     *
-     * @param ordemVendaMercadoPagoDTO
-     *
-     * Escuta a fila pedido efetuado para gerar o QRCODE e publica na
-     * fila par ao ms-pedido exibir para o usuário
+     * @param ordemVendaMercadoPagoDTO Escuta a fila pedido efetuado para gerar o QRCODE e publica na
+     *                                 fila par ao ms-pedido exibir para o usuário
      */
-   // @RabbitListener(queues = "pedido.efetuado") //TODO: Fazer no ms de PEDIDO
+    @RabbitListener(queues = "pedido.efetuado") //TODO: Fazer no ms de PEDIDO
     public void gerarQR(OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO) {
         CredenciaisAcesso credenciaisAcesso = credenciaisIntegracaoRepository.findAll().get(0);
         EscopoCaixaMercadoPago escopoCaixaMercadoPago = caixaMercadoPagoRepository
@@ -248,9 +252,10 @@ public class IntegracaoService {
 
         String qrCode = (String) o;
 
-        if(qrCode != null){
-            rabbitTemplate.convertAndSend("pagamento.qrcode", qrCode);
-        } else{
+        if (qrCode != null) {
+            Logger.getAnonymousLogger().info("QR GERADO: " + qrCode);
+            rabbitTemplate.convertAndSend(PagamentoAMQPConfiguration.PAGAMENTO_QRCODE, qrCode);
+        } else {
             throw new RuntimeException("Não foi possivel gerar QRCODE do pedido" + ordemVendaMercadoPagoDTO.external_reference());
         }
     }
