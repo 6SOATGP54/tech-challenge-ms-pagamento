@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-food-deployment
+spec:
+  selector:
+    matchLabels:
+      app: app-food-selector
+  template:
+    metadata:
+      labels:
+        app: app-food-selector
+    spec:
+      containers:
+        - name: app-food
+          image: cledkube/ms-pedido:latest
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          ports:
+            - containerPort: 8084
+          env:
+            - name: DATABASE_DB
+              value: ms-pagamento
+            - name: HOST_DB
+              value: mongodb
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-food-service
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-food-service
+                  key: password
+            - name: DB_PORT
+              value: "27017"
+            - name: RABBIT_HOST
+              value: rabbitmq
+            - name: RABBIT_PORT
+              value: "5672"
+            - name: RABBIT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rabbi-secret
+                  key: username
+            - name: RABBIT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbi-secret
+                  key: password
+      volumes:
+        - name: postgres-storage
+          emptyDir: {}
+      
