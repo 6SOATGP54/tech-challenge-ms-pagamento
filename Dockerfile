@@ -4,11 +4,11 @@ LABEL maintainer="https://github.com/6SOATGP54"
 WORKDIR /home
 
 #Envoiroments
-ENV HOST_MONGO="" \
-    DATABASE_MONGO="" \
-    MONGO_USER="" \
-    MONGO_PASSWORD="" \
-    MONGO_PORT="" \
+ENV HOST_NOSQL="" \
+    DATABASE_NOSQL="" \
+    NOSQL_USER="" \
+    NOSQL_PASSWORD="" \
+    NOSQL_PORT="" \
     RABBIT_HOST=""  \
     RABBIT_PORT="" \
     RABBIT_USER="" \
