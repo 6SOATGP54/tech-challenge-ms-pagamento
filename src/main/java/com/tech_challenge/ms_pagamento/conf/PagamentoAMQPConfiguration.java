@@ -13,6 +13,10 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class PagamentoAMQPConfiguration {
 
+    public static final String PEDIDO_EX = "pedido.ex";
+    public static final String PEDIDO_EFETUADO = "pedido.efetuado";
+    public static final String PAGAMENTO_QRCODE = "pagamento.qrcode";
+
     @Bean
     public RabbitAdmin criaRabbitAdmin(ConnectionFactory conn) {
         return new RabbitAdmin(conn);
@@ -40,7 +44,7 @@ public class PagamentoAMQPConfiguration {
 
     @Bean
     public Queue filaQR(){
-        return QueueBuilder.durable("pagamento.qrcode").build();
+        return QueueBuilder.durable(PAGAMENTO_QRCODE).build();
     }
 
     @Bean
@@ -64,8 +68,11 @@ public class PagamentoAMQPConfiguration {
         return BindingBuilder.bind(filaPagamentoConcluido()).to(fanoutExchangePagamento());
     }
 
+
     @Bean
-    public Binding bindingPreparacao(){
-        return BindingBuilder.bind(filaPreparacao()).to(fanoutExchangePagamento());
+    public Queue pedidoQueueEfetuado(){
+        return QueueBuilder.durable(PEDIDO_EFETUADO)
+                .build();
     }
+
 }
