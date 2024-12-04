@@ -1,47 +1,65 @@
 package com.tech_challenge.ms_pagamento;
 
 import com.tech_challenge.ms_pagamento.document.*;
+import com.tech_challenge.ms_pagamento.document.sustentacao.DiaDaSemana;
+import com.tech_challenge.ms_pagamento.document.sustentacao.Intervalo;
+import com.tech_challenge.ms_pagamento.document.sustentacao.Location;
+import com.tech_challenge.ms_pagamento.dtos.CaixaDTO;
+import com.tech_challenge.ms_pagamento.dtos.EscopoLojaMercadoPagoDTO;
+import com.tech_challenge.ms_pagamento.dtos.ItemOrdemVendaDTO;
 import com.tech_challenge.ms_pagamento.dtos.OrdemVendaMercadoPagoDTO;
 import com.tech_challenge.ms_pagamento.dtos.models.CredencialModelDTO;
-import com.tech_challenge.ms_pagamento.repository.*;
 import com.tech_challenge.ms_pagamento.services.IntegracaoService;
-import com.tech_challenge.ms_pagamento.services.RequestServices;
-import lombok.AllArgsConstructor;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.amqp.core.Message;
+import org.junit.jupiter.api.*;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
+import java.util.UUID;
 
+import static com.tech_challenge.ms_pagamento.util.TesteUtils.waitForContainers;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @SpringBootTest
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @Testcontainers
 class IntegracaoServiceTest {
 
+    public static final String TOKEN = "TEST-1305516718099336-072118-0539e11bd167f921453fdf836c6de4ec-274249767";
+
+    public static final String USUARIO = "274249767";
+
+    private static String GERARUUID  =  UUID.randomUUID().toString();
+
+    EscopoLojaMercadoPago escopoLojaMercadoPago = null;
+
     @Autowired
     private IntegracaoService integracaoService;
 
+    @Autowired
+    RabbitTemplate rabbitTemplate;
 
     @Container
     static final MongoDBContainer mongoDBContainer = new MongoDBContainer("mongodb/mongodb-community-server:6.0-ubi8")
@@ -53,13 +71,29 @@ class IntegracaoServiceTest {
             .withExposedPorts(5672)
             .waitingFor(Wait.forListeningPort());
 
+
+
     @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
+    static void configureProperties(DynamicPropertyRegistry registry) throws IOException {
         mongoDBContainer.start();
         rabbitMQContainer.start();
 
-        waitForContainers();
+        Process startContainer = new ProcessBuilder(
+                "docker", "run", "-d", "webhooksite/cli",
+                "--", "whcli", "forward",
+                "--token=3336dc93-3464-4da9-8399-c4f127a8d9f8",
+                "--target=http://localhost:8091"
+        ).start();
 
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(startContainer.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+        }
+
+        waitForContainers(mongoDBContainer,rabbitMQContainer);
 
         registry.add("spring.data.mongodb.uri", mongoDBContainer::getReplicaSetUrl);
 
@@ -74,160 +108,124 @@ class IntegracaoServiceTest {
         registry.add("spring.rabbitmq.password", rabbitMQContainer::getAdminPassword);
     }
 
-    private static void waitForContainers() {
-        int maxRetries = 30; // Máximo de 30 segundos
-        int retryInterval = 1000; // 1 segundo
-
-        while ((!mongoDBContainer.isRunning() || !rabbitMQContainer.isRunning()) && maxRetries > 0) {
-            try {
-                System.out.println("Aguardando containers estarem prontos...");
-                Thread.sleep(retryInterval);
-                maxRetries--;
-            } catch (InterruptedException e) {
-                throw new RuntimeException("Erro ao aguardar containers", e);
-            }
-        }
-
-        if (!mongoDBContainer.isRunning() || !rabbitMQContainer.isRunning()) {
-            throw new IllegalStateException("Os containers não ficaram prontos a tempo!");
-        }
-
-        System.out.println("Containers prontos!");
-    }
-
     @BeforeAll
-    void setUp() {
+    void setUp() throws IOException {
         System.out.println("MongoDB rodando: " + mongoDBContainer.isRunning());
         System.out.println("RabbitMQ rodando: " + rabbitMQContainer.isRunning());
+
+        Location location = new Location();
+        location.setStreetNumber("3039");
+        location.setStreetName("Av. Paulista");
+        location.setCityName("São Paulo");
+        location.setStateName("São Paulo");
+        location.setLatitude(-21.7108032);
+        location.setLongitude(-46.6004147);
+        location.setReference("Near to Mercado Pago");
+
+        Intervalo intervalo = new Intervalo();
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+        LocalTime open = LocalTime.parse("08:00", timeFormatter);
+        LocalTime close = LocalTime.parse("16:00", timeFormatter);
+
+        intervalo.setOpen(open);
+        intervalo.setClose(close);
+
+        List<Intervalo> intervalos = new ArrayList<>();
+        intervalos.add(intervalo);
+
+        DiaDaSemana diaDaSemana = new DiaDaSemana();
+        diaDaSemana.setDia(DiaDaSemana.Dia.friday);
+        diaDaSemana.setIntervalos(intervalos);
+
+        List<DiaDaSemana> diaDaSemanas = new ArrayList<>();
+        diaDaSemanas.add(diaDaSemana);
+
+        escopoLojaMercadoPago = new EscopoLojaMercadoPago();
+        escopoLojaMercadoPago.setName("Tech Challenge Filial - SP - ".concat(GERARUUID));
+        escopoLojaMercadoPago.setBusinessHours(diaDaSemanas);
+        escopoLojaMercadoPago.setLocation(location);
+        escopoLojaMercadoPago.setExternalId("TECHLOJA".concat(GERARUUID));
+
+
     }
 
     @Test
+    @Order(1)
     void deveCadastrarCredenciaisQuandoDadosForemValidos() {
-        CredencialModelDTO credencialDTO = new CredencialModelDTO("token_test",
-                "user_test",
-                "",
+
+        CredencialModelDTO credencialDTO = new CredencialModelDTO(TOKEN,
+                USUARIO,
+                "http://3336dc93-3464-4da9-8399-c4f127a8d9f8.webhook.site",
                 CredenciaisAcesso.ServicosIntegracao.MERCADO_PAGO);
         Boolean resultado = integracaoService.cadastroCredenciais(credencialDTO);
 
         assertNotNull(resultado);
     }
 
-//    @Test
-//    void deveCadastrarLojaMercadoLivre() {
-//        EscopoLojaMercadoPago escopoLojaMercadoPago = new EscopoLojaMercadoPago();
-//        escopoLojaMercadoPago.setName("Loja Teste");
-//
-//        CredenciaisAcesso credenciaisAcesso = new CredenciaisAcesso();
-//        credenciaisAcesso.setUsuario("usuario_teste");
-//
-//        EscopoLojaMercadoPago lojaSalva = new EscopoLojaMercadoPago();
-//        lojaSalva.setUserId("12345");
-//
-//        when(credenciaisIntegracaoRepository.findAll()).thenReturn(List.of(credenciaisAcesso));
-//        when(lojaMercadoLivreRepository.save(any(EscopoLojaMercadoPago.class))).thenReturn(lojaSalva);
-//
-//        EscopoLojaMercadoPago resultado = integracaoService.cadastroLojaMercadoLivre(escopoLojaMercadoPago);
-//
-//        assertNotNull(resultado);
-//        assertEquals("12345", resultado.getUserId());
-//        verify(lojaMercadoLivreRepository, times(1)).save(any(EscopoLojaMercadoPago.class));
-//    }
-//
-//    @Test
-//    void deveCadastrarCaixaLojaMercadoLivre() {
-//        EscopoCaixaMercadoPago caixa = new EscopoCaixaMercadoPago();
-//        caixa.setStore_id("12345");
-//
-//        EscopoLojaMercadoPago loja = new EscopoLojaMercadoPago();
-//        loja.setUserId("12345");
-//        loja.setExternalId("98765");
-//
-//        CredenciaisAcesso credenciaisAcesso = new CredenciaisAcesso();
-//        credenciaisAcesso.setUsuario("usuario_teste");
-//        credenciaisAcesso.setToken("token_teste");
-//
-//        when(lojaMercadoLivreRepository.findByUserId("12345")).thenReturn(loja);
-//        when(credenciaisIntegracaoRepository.findAll()).thenReturn(List.of(credenciaisAcesso));
-//        when(caixaMercadoPagoRepository.save(any(EscopoCaixaMercadoPago.class))).thenReturn(caixa);
-//
-//        EscopoCaixaMercadoPago resultado = integracaoService.cadastrarCaixaLojaMercadoLivre(caixa);
-//
-//        assertNotNull(resultado);
-//        assertEquals("12345", resultado.getStore_id());
-//        verify(caixaMercadoPagoRepository, times(1)).save(any(EscopoCaixaMercadoPago.class));
-//    }
-//
-//    @Test
-//    void deveConsultarPagamentoEEnviarMensagemQuandoPagamentoEfetuado() {
-//        Object id = "123";
-//        Object type = "payment";
-//
-//        CredenciaisAcesso credenciaisAcesso = new CredenciaisAcesso();
-//        credenciaisAcesso.setUsuario("usuario_teste");
-//        credenciaisAcesso.setToken("token_teste");
-//
-//        when(credenciaisIntegracaoRepository.findAll()).thenReturn(List.of(credenciaisAcesso));
-//        when(RequestServices.requestToMercadoPago(any(), any(), anyString(), any(), any()))
-//                .thenReturn("{\"status\":\"approved\",\"external_reference\":\"12345\"}");
-//
-//        integracaoService.consultarPagamento(id, type);
-//
-//        verify(rabbitTemplate, times(1)).convertAndSend(eq("pagamento.ex"), eq(""), any(Message.class));
-//    }
-//
-//    @Test
-//    void deveGerarQRCodeEPublicarNaFilaQuandoBemSucedido() {
-//        OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO = new OrdemVendaMercadoPagoDTO(
-//                "Descrição",
-//                "12345",
-//                List.of(),
-//                "Título",
-//                BigDecimal.valueOf(100),
-//                "webhook_url"
-//        );
-//
-//        CredenciaisAcesso credenciaisAcesso = new CredenciaisAcesso();
-//        credenciaisAcesso.setUsuario("usuario_teste");
-//        credenciaisAcesso.setToken("token_teste");
-//
-//        EscopoCaixaMercadoPago caixa = new EscopoCaixaMercadoPago();
-//        caixa.setExternal_id("caixa_teste");
-//
-//        when(credenciaisIntegracaoRepository.findAll()).thenReturn(List.of(credenciaisAcesso));
-//        when(caixaMercadoPagoRepository.findByUsuario("usuario_teste")).thenReturn(Optional.of(caixa));
-//        when(RequestServices.requestToMercadoPago(any(), any(), anyString(), any(), any()))
-//                .thenReturn("QRCodeData");
-//
-//        integracaoService.gerarQR(ordemVendaMercadoPagoDTO);
-//
-//        verify(rabbitTemplate, times(1)).convertAndSend(eq("pagamento.qrcode"), eq("QRCodeData"));
-//    }
-//
-//    @Test
-//    void deveLancarExcecaoQuandoNaoForPossivelGerarQRCode() {
-//        OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO = new OrdemVendaMercadoPagoDTO(
-//                "Descrição",
-//                "12345",
-//                List.of(),
-//                "Título",
-//                BigDecimal.valueOf(100),
-//                "webhook_url"
-//        );
-//
-//        CredenciaisAcesso credenciaisAcesso = new CredenciaisAcesso();
-//        credenciaisAcesso.setUsuario("usuario_teste");
-//        credenciaisAcesso.setToken("token_teste");
-//
-//        EscopoCaixaMercadoPago caixa = new EscopoCaixaMercadoPago();
-//        caixa.setExternal_id("caixa_teste");
-//
-//        when(credenciaisIntegracaoRepository.findAll()).thenReturn(List.of(credenciaisAcesso));
-//        when(caixaMercadoPagoRepository.findByUsuario("usuario_teste")).thenReturn(Optional.of(caixa));
-//        when(RequestServices.requestToMercadoPago(any(), any(), anyString(), any(), any()))
-//                .thenReturn(null);
-//
-//        assertThrows(RuntimeException.class, () -> integracaoService.gerarQR(ordemVendaMercadoPagoDTO));
-//
-//        verify(rabbitTemplate, times(1)).convertAndSend(eq("pagamento.ex"), eq(""), any(Message.class));
-//    }
+    @Test
+    @Order(2)
+    void deveCadastrarLojaMercadoLivre() {
+        EscopoLojaMercadoPago resultado = integracaoService.cadastroLojaMercadoLivre(escopoLojaMercadoPago);
+
+        assertNotNull(resultado);
+        assertNotNull(resultado.getUserId());
+    }
+
+
+    @Test
+    @Order(3)
+    void deveCadastrarCaixaLojaMercadoLivre() {
+
+        EscopoCaixaMercadoPago escopoCaixaMercadoPago = new EscopoCaixaMercadoPago();
+
+        escopoCaixaMercadoPago.setCategory(null);
+        escopoCaixaMercadoPago.setExternal_id(escopoLojaMercadoPago.getExternalId());
+        escopoCaixaMercadoPago.setExternal_store_id(escopoLojaMercadoPago.getUserId());
+        escopoCaixaMercadoPago.setStore_id(escopoLojaMercadoPago.getUserId());
+
+        escopoCaixaMercadoPago.setName("TECHCX0".concat(GERARUUID));
+        EscopoCaixaMercadoPago resultado = integracaoService.cadastrarCaixaLojaMercadoLivre(escopoCaixaMercadoPago);
+
+        assertNotNull(resultado);
+
+        assertNotNull(resultado.getIdAPI());
+
+    }
+
+    @Test
+    @Order(4)
+    void GerarQR() {
+
+        List<ItemOrdemVendaDTO> itemOrdemVendaDTOS = new ArrayList<>();
+
+        ItemOrdemVendaDTO itemOrdemVendaDTO = new ItemOrdemVendaDTO(
+                null,
+                "Teste".concat(GERARUUID),
+                "Teste".concat(GERARUUID),
+                "Teste".concat(GERARUUID),
+                BigDecimal.valueOf(100),
+                1,
+                null,
+                BigDecimal.valueOf(100));
+
+        itemOrdemVendaDTOS.add(itemOrdemVendaDTO);
+
+        OrdemVendaMercadoPagoDTO ordemVendaMercadoPagoDTO = new OrdemVendaMercadoPagoDTO(
+                "Descrição".concat(GERARUUID),
+                GERARUUID,
+                itemOrdemVendaDTOS,
+                "Teste".concat(GERARUUID),
+                BigDecimal.valueOf(100),
+                null);
+
+        Object o = rabbitTemplate.receiveAndConvert("pagamento.qrcode", 10000);
+
+        String qrcode = (String) o;
+        System.out.println(qrcode);
+
+        assertNotNull(qrcode);
+
+    }
+
+
 }
