@@ -181,12 +181,9 @@
 							</formats>
 							<excludes>
 								<!-- Ignora classes ou pacotes específicos -->
-								<exclude>**/conf/**</exclude> <!-- Exemplo: ignora tudo em 'model' -->
-								<exclude>**/controller/**</exclude>
+								<exclude>**/services/**</exclude> <!-- Exemplo: ignora tudo em 'model' -->
 								<exclude>**/document/**</exclude>
 								<exclude>**/dtos/**</exclude>
-								<exclude>**/repository/**</exclude>
-								<exclude>**/util/**</exclude>
 								<exclude>**/enums/**</exclude><!-- Exemplo: ignora arquivos gerados -->
 								<exclude>**ms_pagamento/MsPagamentoApplication.java</exclude>
 							</excludes>
