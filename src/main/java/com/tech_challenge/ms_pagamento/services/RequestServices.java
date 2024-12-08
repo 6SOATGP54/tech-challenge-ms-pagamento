@@ -32,6 +32,7 @@ public class RequestServices {
 
         Object body = null;
         try {
+            restTemplate.setInterceptors(Collections.singletonList(new CurlLoggingInterceptor()));
             ResponseEntity<String> response = restTemplate.exchange(endpoint, httpMethod, httpEntity, String.class);
 
             body = response.getBody();

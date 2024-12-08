@@ -18,6 +18,7 @@ import com.tech_challenge.ms_pagamento.util.Assembler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 
@@ -45,6 +46,9 @@ public class IntegracaoService {
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
+
+    @Value("${mercadopago.mock}")
+    private Boolean enabledMock;
 
 
     public Boolean cadastroCredenciais(CredencialModelDTO credenciaisAcesso) {
@@ -80,12 +84,18 @@ public class IntegracaoService {
 
         String urlCriarLoja = EndpointsIntegracaoEnum.CRIAR_LOJA.parametrosUrl(parametros);
 
-        Object o =
-                RequestServices.requestToMercadoPago(escopoLojaMercadoPagoDTO,
-                        credenciaisAcesso,
-                        urlCriarLoja,
-                        HttpMethod.POST,
-                        EndpointsIntegracaoEnum.CRIAR_LOJA);
+        Object o;
+
+        if (enabledMock) {
+            o = null;
+        } else {
+            o = RequestServices.requestToMercadoPago(escopoLojaMercadoPagoDTO,
+                            credenciaisAcesso,
+                            urlCriarLoja,
+                            HttpMethod.POST,
+                            EndpointsIntegracaoEnum.CRIAR_LOJA);
+        }
+
 
 
         escopoLojaMercadoPago.setUserId(o instanceof Long ? String.valueOf(o) : null);
