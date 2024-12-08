@@ -93,3 +93,5 @@ Grupo nº 54 da turma 6SOAT/2024 do curso lato sensu "Especialização em Arquit
 - Bruno Matias
 - Clederson Cruz
 - Lucas Santiago
+
+91% (200/218)      
