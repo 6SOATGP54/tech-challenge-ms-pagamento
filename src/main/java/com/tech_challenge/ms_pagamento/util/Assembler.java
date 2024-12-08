@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class Assembler {
 
-   private static ModelMapper modelMapper;
+   public static ModelMapper modelMapper;
 
    @Autowired
     public Assembler(ModelMapper modelMapper) {
