@@ -62,7 +62,11 @@ Cada microsserviço possui um banco de dados independente, garantindo isolamento
 [img] Evidência de cobertura de testes para o microsserviço Pagamento
 
 <p align="center">
-    <img src="./docs/coverage/ms-product-coverage.png"><br>Evidência de cobertura de testes para o microsserviço Produto</img>
+    <img src="./docs/coverage/ms-payment-coverage.png"><br>Evidência de cobertura de testes para o microsserviço Produto</img>
+</p>
+
+<p align="center">
+    <img src="./docs/coverage/ms-payment-coverage-sonar.png"><br>Evidência de cobertura de testes para o microsserviço Produto</img>
 </p>
 
 Os links para as ferramentas utilizadas estão disponíveis na seção **Links dos Repositórios**.
