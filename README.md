@@ -58,9 +58,6 @@ Cada microsserviço possui um banco de dados independente, garantindo isolamento
 
 ## Evidências de Cobertura de Testes
 
-[img] Evidência de cobertura de testes para o microsserviço Pedido  
-[img] Evidência de cobertura de testes para o microsserviço Pagamento
-
 <p align="center">
     <img src="./docs/coverage/ms-payment-coverage.png"><br>Evidência de cobertura de testes para o microsserviço Pagamento</img>
 </p>
@@ -71,11 +68,21 @@ Cada microsserviço possui um banco de dados independente, garantindo isolamento
 
 Os links para as ferramentas utilizadas estão disponíveis na seção **Links dos Repositórios**.
 
-## Demonstração
+## Arquitetura
 
-[img] Funcionamento da aplicação  
-[img] Arquitetura do sistema refatorado  
-[img] Pipeline de CI/CD em execução
+<p align="center">
+    <img src="./docs/diagrams/nova-arquitetura.png"><br>Nova Arquitetura na AWS</img>
+</p>
+
+**Principais atualizações**:
+
+O sistema agora é baseado em três microsserviços independentes, projetados para atender diferentes funcionalidades. Essa divisão facilita a manutenção e a escalabilidade, além de otimizar o desempenho. Os serviços incluem: Pedido, que gerencia o ciclo de vida dos pedidos; Pagamento, responsável pelo processamento de pagamentos; e Produto, para administração do catálogo de produtos.
+
+Cada microsserviço possui seu próprio banco de dados, promovendo o isolamento de dados. O PostgreSQL é usado no microsserviço Pagamento para transações confiáveis, enquanto o MongoDB foi adotado pelos microsserviços Pedido e Produto devido à flexibilidade de um banco NoSQL.
+
+Um API Gateway foi integrado para centralizar a comunicação entre os clientes e os microsserviços, oferecendo um ponto único de acesso e gerenciando questões como autenticação e roteamento.
+
+Essa arquitetura melhora a modularidade e permite que cada serviço seja escalado ou atualizado independentemente, alinhando-se às boas práticas de desenvolvimento moderno.
 
 ## Links dos Repositórios
 
